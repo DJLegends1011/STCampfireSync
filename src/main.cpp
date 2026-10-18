@@ -30,7 +30,9 @@ namespace
 namespace STAPI = SkyrimTogetherAPI;
 
 constexpr const char* kChannelName = "DJL.CampfireSync";
-constexpr const char* kIniPath = "Data/SKSE/Plugins/STCampfireSync.ini";
+// Explicitly relative to the game folder: GetPrivateProfile* looks in the Windows folder for paths it does not
+// recognise as paths.
+constexpr const char* kIniPath = ".\Data\SKSE\Plugins\STCampfireSync.ini";
 
 // Skyrim.esm 0x035F49 "Campfire01Burning": a burning campfire moveable static (campfire01burning.nif plus its
 // looping fire sound). Overridable from the ini.
