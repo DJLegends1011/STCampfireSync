@@ -21,6 +21,7 @@
 #include <cmath>
 #include <format>
 #include <optional>
+#include <random>
 #include <unordered_map>
 
 #include "SkyrimTogetherAPI.h"
@@ -45,17 +46,20 @@ constexpr float kPickMinCos = 0.866f;    // ... and it must be within 30 degrees
 constexpr float kMaxCoordinate = 1.0e6f; // anything larger in a message is garbage
 
 // One campfire, ours or a remote copy. The handle (not a raw pointer) survives the game unloading the cell.
+// Owner is the player ID that last announced a remote copy. Player IDs only last one connection, so a campfire's
+// ID never contains one: when its placer reconnects, they re-announce it and Owner moves to their new ID.
 struct Campfire
 {
     RE::ObjectRefHandle Ref;
     bool Own;
+    std::uint32_t Owner;
 };
 
 STAPI::IVSkyrimTogether1* g_pApi = nullptr;
 STAPI::ChannelHandle g_channel = 0;
 RE::TESBoundObject* g_pBase = nullptr;
 std::uint32_t g_hotkey = kDefaultHotkey;
-std::uint32_t g_counter = 0;
+std::mt19937 g_random{std::random_device{}()};
 
 // Only touched on the game's main thread. The Skyrim Together callbacks hand their work over with AddTask.
 std::unordered_map<std::uint32_t, Campfire> g_campfires;
@@ -112,7 +116,7 @@ void Destroy(const Campfire& aCampfire)
 // Creates a campfire at aPos. Our own campfires are normal references and save with the game. A remote copy
 // belongs to someone else's world, so it is flagged to be skipped when saving: otherwise it would stay in our save
 // as a permanent campfire after the placer is gone. Without the flag we would have to trust cleanup always runs.
-bool Spawn(std::uint32_t aId, const RE::NiPoint3& aPos, float aRotZ, bool aOwn)
+bool Spawn(std::uint32_t aId, const RE::NiPoint3& aPos, float aRotZ, bool aOwn, std::uint32_t aOwner)
 {
     auto* pPlayer = RE::PlayerCharacter::GetSingleton();
     if (!pPlayer || !g_pBase || g_campfires.contains(aId))
@@ -134,7 +138,7 @@ bool Spawn(std::uint32_t aId, const RE::NiPoint3& aPos, float aRotZ, bool aOwn)
     pRef->data.angle.z = aRotZ;
     pRef->SetPosition(aPos);
 
-    g_campfires.emplace(aId, Campfire{pRef->GetHandle(), aOwn});
+    g_campfires.emplace(aId, Campfire{pRef->GetHandle(), aOwn, aOwner});
     return true;
 }
 
@@ -151,7 +155,7 @@ void RemoveRemoteCopiesIf(auto aPredicate)
 {
     for (auto it = g_campfires.begin(); it != g_campfires.end();)
     {
-        if (!it->second.Own && aPredicate(it->first))
+        if (!it->second.Own && aPredicate(it->second))
         {
             Destroy(it->second);
             it = g_campfires.erase(it);
@@ -195,8 +199,7 @@ void OnHotkey()
     if (!pPlayer || !pUI || pUI->GameIsPaused())
         return;
 
-    const auto playerId = g_pApi->GetLocalPlayerId();
-    if (playerId == 0)
+    if (g_pApi->GetLocalPlayerId() == 0)
     {
         RE::DebugNotification("Campfire sync: not connected to a Skyrim Together server");
         return;
@@ -209,15 +212,17 @@ void OnHotkey()
         return;
     }
 
-    // Our IDs are "<our player id> * 65536 + counter", so they never collide with another player's.
-    g_counter = (g_counter % 0xFFFF) + 1;
-    const std::uint32_t id = playerId * 65536u + g_counter;
+    // A random ID, not one built from our player ID: that changes on every reconnect, while a campfire outlives
+    // it. With a handful of campfires per party, a 32-bit clash is not a practical concern for an example.
+    std::uint32_t id = 0;
+    while (id == 0 || g_campfires.contains(id))
+        id = g_random();
     const float yaw = pPlayer->GetAngleZ();
     auto pos = pPlayer->GetPosition();
     pos.x += std::sin(yaw) * kPlaceDistance;
     pos.y += std::cos(yaw) * kPlaceDistance;
 
-    if (Spawn(id, pos, yaw, true))
+    if (Spawn(id, pos, yaw, true, 0))
         SendToParty(FormatPlace(id, pos, yaw));
 }
 
@@ -237,11 +242,17 @@ void HandleMessage(std::uint32_t aSenderId, const std::string& aMessage)
         if (!ParseNumber(tokens[1], id) || !ParseNumber(tokens[2], pos.x) || !ParseNumber(tokens[3], pos.y) ||
             !ParseNumber(tokens[4], pos.z) || !ParseNumber(tokens[5], rotZ))
             return;
-        // A player only ever announces campfires with their own ID prefix. This is also what lets us find all
-        // of a player's copies when they leave.
-        if (id == 0 || id / 65536u != aSenderId)
+        if (id == 0)
             return;
-        Spawn(id, pos, rotZ, false);
+        // Already known: the placer reconnected under a new player ID and is re-announcing it. Follow them, so
+        // the copy is removed when they leave. Never let anyone claim one of our own campfires.
+        if (const auto it = g_campfires.find(id); it != g_campfires.end())
+        {
+            if (!it->second.Own)
+                it->second.Owner = aSenderId;
+            return;
+        }
+        Spawn(id, pos, rotZ, false, aSenderId);
     }
     else if (tokens.size() == 2 && tokens[0] == "remove")
     {
@@ -282,12 +293,12 @@ void OnPartyChanged(std::uint32_t aPlayerId, bool aJoined)
                 return;
             }
 
-            RemoveRemoteCopiesIf([aPlayerId](std::uint32_t aId) { return aId / 65536u == aPlayerId; });
+            RemoveRemoteCopiesIf([aPlayerId](const Campfire& acCampfire) { return acCampfire.Owner == aPlayerId; });
 
             // When we leave or disconnect, we get joined=false for every former member. Once we are alone
             // nobody is left to remove their campfires, so drop them all.
             if (localId == 0 || !g_pApi->IsInParty())
-                RemoveRemoteCopiesIf([](std::uint32_t) { return true; });
+                RemoveRemoteCopiesIf([](const Campfire&) { return true; });
         });
 }
 

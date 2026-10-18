@@ -28,9 +28,11 @@ place <id> <x> <y> <z> <rotZ>
 remove <id>
 ```
 
-`<id>` is `local player id * 65536 + counter`, so IDs from different players never collide and the player that
-owns a campfire can be read off its ID. ST stamps the real sender on every message. A `place` whose ID does not
-belong to its sender is ignored.
+`<id>` is a random 32-bit number picked by the placer. It deliberately does **not** contain a player ID: Skyrim
+Together hands out a new player ID on every connection, while a campfire outlives a reconnect. Instead, each
+remote copy remembers its owner, which is the Sender that ST stamped on the latest `place` for it. When a placer
+reconnects and re-announces their campfires, the owner moves to their new ID, so their copies are still removed
+when they leave. A `place` for one of your own campfires is ignored.
 
 ### Behavior
 
