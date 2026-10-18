@@ -113,9 +113,9 @@ void Destroy(const Campfire& aCampfire)
     }
 }
 
-// Creates a campfire at aPos. Our own campfires are normal references and save with the game. A remote copy
-// belongs to someone else's world, so it is flagged to be skipped when saving: otherwise it would stay in our save
-// as a permanent campfire after the placer is gone. Without the flag we would have to trust cleanup always runs.
+// Creates a campfire at aPos. Campfires last one game session, ours included: none is ever written to a save.
+// A saved one would come back after a reload without this plugin knowing about it (the hotkey would stack a new
+// one on top, and nobody else would ever see it), and a saved remote copy would outlive its placer.
 bool Spawn(std::uint32_t aId, const RE::NiPoint3& aPos, float aRotZ, bool aOwn, std::uint32_t aOwner)
 {
     auto* pPlayer = RE::PlayerCharacter::GetSingleton();
@@ -128,8 +128,7 @@ bool Spawn(std::uint32_t aId, const RE::NiPoint3& aPos, float aRotZ, bool aOwn, 
 
     // kRefPermanentlyDeleted (0x80) makes TESObjectREFR::CheckSaveGame return false, so the save drops the
     // reference. Set it before anything can save, and set nothing else: other bits in this word mean other things.
-    if (!aOwn)
-        pRef->inGameFormFlags.set(RE::TESForm::InGameFormFlag::kRefPermanentlyDeleted);
+    pRef->inGameFormFlags.set(RE::TESForm::InGameFormFlag::kRefPermanentlyDeleted);
 
     // PlaceObjectAtMe copies the player's whole rotation, including the camera pitch while looking at the
     // ground, which tilts the campfire. Keep only the yaw so every client places it upright and identically.

@@ -42,8 +42,11 @@ when they leave. A `place` for one of your own campfires is ignored.
 - **Late join:** when a player joins your party you `SendTo` them one `place` per campfire you placed and still have.
 - **Leave:** when a player leaves, their remote copies are deleted. When you leave the party or disconnect, all
   remote copies are deleted.
-- **Saves:** remote copies are flagged so they are not written to your save (`TESForm::inGameFormFlags` bit
-  `0x80`, which makes `TESObjectREFR::CheckSaveGame` return false). Your own campfires save normally.
+- **Saves:** campfires last one game session. Every campfire, your own included, is flagged so it is never
+  written to a save (`TESForm::inGameFormFlags` bit `0x80`, which makes `TESObjectREFR::CheckSaveGame` return
+  false). A saved campfire would come back after a reload without the plugin knowing about it: nobody else would
+  see it, and the hotkey would stack a new one on top. Persisting them properly needs SKSE's co-save, which this
+  example leaves out.
 
 ## Build
 
@@ -81,6 +84,5 @@ This is an example, not a polished mod.
 
 - Positions are sent without a cell, so it assumes the party is in the same cell or worldspace. A copy placed
   for a player in another place appears at those coordinates in *your* cell.
-- Only campfires placed in the current session are tracked. A campfire saved from an earlier session is a normal
-  reference but is not synced, and cannot be picked up with the hotkey.
+- Campfires do not survive a save and reload (see **Saves** above).
 - Copies are not rebuilt when a cell resets, and rotation is applied on a best-effort basis.
