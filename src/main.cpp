@@ -127,6 +127,10 @@ bool Spawn(std::uint32_t aId, const RE::NiPoint3& aPos, float aRotZ, bool aOwn)
     if (!aOwn)
         pRef->inGameFormFlags.set(RE::TESForm::InGameFormFlag::kRefPermanentlyDeleted);
 
+    // PlaceObjectAtMe copies the player's whole rotation, including the camera pitch while looking at the
+    // ground, which tilts the campfire. Keep only the yaw so every client places it upright and identically.
+    pRef->data.angle.x = 0.0f;
+    pRef->data.angle.y = 0.0f;
     pRef->data.angle.z = aRotZ;
     pRef->SetPosition(aPos);
 
