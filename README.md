@@ -11,7 +11,7 @@ a campfire to pick it up, yours or anyone else's.
 
 | API feature | Where it is used |
 | --- | --- |
-| `RequestPluginAPI` lookup, staying inactive without ST | `SKSEPluginLoad` |
+| `SkyrimTogetherRequestPluginAPI` lookup, staying inactive without ST | `SKSEPluginLoad` |
 | `RegisterChannel` with a message and a party callback | `SKSEPluginLoad` |
 | `Send` to the party | placing and picking up (`OnHotkey`) |
 | `SendTo` one member (late joiners) | `OnPartyChanged`, `joined=true` |

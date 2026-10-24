@@ -363,12 +363,12 @@ SKSEPluginLoad(const SKSE::LoadInterface* apSkse)
     SKSE::Init(apSkse);
     InitLog();
 
-    // Skyrim Together exports RequestPluginAPI from its own executable. Without it we are not running under
+    // Skyrim Together exports kRequestPluginAPIName from its own executable. Without it we are not running under
     // Skyrim Together (or it is too old), and the plugin does nothing.
-    const auto pRequest = reinterpret_cast<STAPI::RequestPluginAPI_t>(GetProcAddress(GetModuleHandleW(nullptr), "RequestPluginAPI"));
+    const auto pRequest = reinterpret_cast<STAPI::RequestPluginAPI_t>(GetProcAddress(GetModuleHandleW(nullptr), STAPI::kRequestPluginAPIName));
     if (!pRequest)
     {
-        SKSE::log::info("RequestPluginAPI not found: not running under Skyrim Together, staying inactive");
+        SKSE::log::info("{} not found: not running under Skyrim Together, staying inactive", STAPI::kRequestPluginAPIName);
         return true;
     }
 
